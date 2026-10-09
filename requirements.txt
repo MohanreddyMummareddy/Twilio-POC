@@ -1,0 +1,5 @@
+Flask>=3.1,<4
+twilio>=9,<10
+python-dotenv>=1,<2
+pytest>=8,<10
+gunicorn>=23,<24; sys_platform != 'win32'

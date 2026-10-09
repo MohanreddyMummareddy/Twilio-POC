@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: twilio-whatsapp-poc
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    healthCheckPath: /health
+    envVars:
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_FROM
+        sync: false
+      - key: VALIDATE_TWILIO_REQUESTS
+        value: 'true'
+      - key: PUBLIC_WEBHOOK_URL
+        sync: false
+      - key: SEND_API_KEY
+        generateValue: true

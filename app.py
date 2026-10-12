@@ -21,7 +21,7 @@ WHATSAPP_ADDRESS = re.compile(r"whatsapp:\+[1-9]\d{6,14}\Z")
 def build_reply(body, sender):
     command = body.strip().lower()
     if command in {"hi", "hello", "start"}:
-        return "Hello! Send HELP to see available commands."
+        return "Hello! Welcome to Twilio POC by Mohan. Send HELP to see available commands."
     if command == "help":
         return "Commands: HI, HELP, and STATUS."
     if command == "status":

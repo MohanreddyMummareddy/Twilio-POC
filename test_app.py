@@ -34,7 +34,7 @@ def test_health(application):
 
 @pytest.mark.parametrize("text", ["hi", "hello", "start", " HI "])
 def test_greeting(text):
-    assert module.build_reply(text, "sender").startswith("Hello!")
+    assert module.build_reply(text, "sender") == "Hello! Welcome to Twilio POC by Mohan. Send HELP to see available commands."
 
 
 def test_commands():

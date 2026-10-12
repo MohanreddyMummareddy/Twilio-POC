@@ -2,7 +2,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from twilio.base.exceptions import TwilioException
+from twilio.base.exceptions import TwilioException, TwilioRestException
+from requests.exceptions import ConnectionError
 from twilio.request_validator import RequestValidator
 
 import app as module
@@ -125,3 +126,28 @@ def test_twilio_client(application, monkeypatch):
         assert REAL_REPLY_TO_WHATSAPP("whatsapp:+919999999999", "Hello") == "SMsdk"
     client.messages.create.assert_called_once_with(to="whatsapp:+919999999999",
         from_="whatsapp:+14155550100", body="Hello")
+
+
+def test_rest_error_logs_only_safe_diagnostics(application, mock_send, caplog):
+    mock_send.side_effect = TwilioRestException(
+        400, "https://private-url.example", msg="private-token private-message", code=63002
+    )
+    response = application.test_client().post("/whatsapp", data={
+        "From": "whatsapp:+919999999999", "Body": "private-body",
+    })
+    assert response.status_code == 502
+    assert "error_code=63002 http_status=400" in caplog.text
+    for private in ("private-token", "private-message", "private-url", "private-body", "+919999999999"):
+        assert private not in caplog.text
+        assert private not in response.get_data(as_text=True)
+
+
+@pytest.mark.parametrize("exception", [TwilioException("private-token"), ConnectionError("private-token")])
+def test_sdk_and_network_logs_are_safe(application, mock_send, caplog, exception):
+    mock_send.side_effect = exception
+    response = application.test_client().post("/whatsapp", data={
+        "From": "whatsapp:+919999999999", "Body": "hello",
+    })
+    assert response.status_code == 502
+    assert "SDK or network error" in caplog.text
+    assert "private-token" not in caplog.text

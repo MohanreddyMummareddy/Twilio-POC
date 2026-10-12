@@ -6,7 +6,7 @@ import re
 from dotenv import load_dotenv
 from flask import Flask, current_app, jsonify, request
 from requests.exceptions import RequestException
-from twilio.base.exceptions import TwilioException
+from twilio.base.exceptions import TwilioException, TwilioRestException
 from twilio.http.http_client import TwilioHttpClient
 from twilio.request_validator import RequestValidator
 from twilio.rest import Client
@@ -62,8 +62,16 @@ def create_app(test_config=None):
             return jsonify(message_sid=reply_to_whatsapp(to, body)), 200
         except RuntimeError:
             return jsonify(error="Twilio configuration is incomplete or invalid"), 503
+        except TwilioRestException as error:
+            # Log only numeric diagnostics, never exception text or request data.
+            code = error.code if isinstance(error.code, int) else None
+            status = error.status if isinstance(error.status, int) else None
+            application.logger.error(
+                "Twilio message delivery failed: error_code=%s http_status=%s", code, status
+            )
+            return jsonify(error="Twilio message delivery failed"), 502
         except (TwilioException, RequestException):
-            # Do not expose provider exceptions, which can contain private data.
+            application.logger.error("Twilio message delivery failed: SDK or network error")
             return jsonify(error="Twilio message delivery failed"), 502
 
     @application.get("/health")

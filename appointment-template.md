@@ -23,7 +23,7 @@ TWILIO_CONTENT_SID=HXb5b62575e6e4ff6129ad7c8efe1f983e
 TWILIO_CONTENT_VARIABLES={"1":"12/1","2":"3pm"}
 ```
 
-Save and redeploy. Incoming text then triggers this fixed template. It does not
-send the custom HELLO/HELP reply. Leave `TWILIO_CONTENT_SID` blank to use plain text
+Save and redeploy. Manual `/send` calls then use this fixed template. Inbound text uses custom
+HELLO/HELP replies through TwiML independently of these settings. Leave `TWILIO_CONTENT_SID` blank to use plain text
 on accounts that support it. The `/send` endpoint also uses the configured template
 when template mode is enabled, instead of its supplied `body`.

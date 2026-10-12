@@ -1,11 +1,11 @@
 # Twilio WhatsApp text service
 
 A standalone Flask application following [HANDOFF.md](HANDOFF.md). It receives
-WhatsApp text at `POST /whatsapp` and replies through the Twilio Messages API.
+WhatsApp text at `POST /whatsapp` and returns TwiML XML for legacy Sandbox replies.
 Commands: HI, HELLO, START, HELP, STATUS; other messages are echoed.
 
 For trial accounts requiring `ContentSid`, see [appointment-template.md](appointment-template.md).
-Template mode replaces these replies with the configured template.
+Template mode applies only to manual `/send` messages. Inbound replies always use TwiML.
 
 ## Local setup (Windows PowerShell)
 
@@ -41,7 +41,7 @@ curl.exe -X POST http://127.0.0.1:5000/whatsapp -d "Body=HELP" --data-urlencode 
 ```
 
 `/send` takes JSON with `to` (for example `whatsapp:+919999999999`) and `body`.
-Text must be nonempty and at most 1600 characters. Successful sends return
+Text must be nonempty and at most 1600 characters. Successful manual sends return
 `{"message_sid":"SM..."}`. Errors return JSON with an `error` field.
 Health reports that the process is running; it does not verify Twilio credentials.
 
@@ -70,11 +70,13 @@ auto-reply webhook configuration. Set its method to POST and URL to your public
 Send HELP from the linked phone and verify the reply and Twilio message logs.
 The server must be running and reachable: Twilio cannot reach `127.0.0.1`.
 
-The trial flow restricts direct TwiML responses, so this app uses REST API replies.
+This app targets the legacy WhatsApp Sandbox, which supports TwiML replies within
+the 24-hour customer service window. The newer Try out WhatsApp trial flow has
+different restrictions and is not the target of this webhook.
 Trial recipient, template, and outbound restrictions still apply. See Twilio's
 [trial WhatsApp guide](https://www.twilio.com/docs/usage/trials/try-out-whatsapp)
 and [request validation implementation](https://github.com/twilio/twilio-python/blob/main/twilio/request_validator.py).
 
 This POC sends synchronously and does not persist webhook deduplication state.
-Repeated webhook delivery can send repeated replies. A live WhatsApp exchange
+Repeated webhook delivery can result in repeated replies. A live WhatsApp exchange
 requires configured credentials, an approved public host, and a linked recipient.

@@ -6,12 +6,13 @@ import os
 import re
 
 from dotenv import load_dotenv
-from flask import Flask, current_app, jsonify, request
+from flask import Flask, Response, current_app, jsonify, request
 from requests.exceptions import RequestException
 from twilio.base.exceptions import TwilioException, TwilioRestException
 from twilio.http.http_client import TwilioHttpClient
 from twilio.request_validator import RequestValidator
 from twilio.rest import Client
+from twilio.twiml.messaging_response import MessagingResponse
 
 load_dotenv()
 WHATSAPP_ADDRESS = re.compile(r"whatsapp:\+[1-9]\d{6,14}\Z")
@@ -127,7 +128,9 @@ def create_app(test_config=None):
         body = request.form.get("Body", "")
         if not WHATSAPP_ADDRESS.fullmatch(sender) or not body.strip() or len(body) > 1600:
             return jsonify(error="Valid WhatsApp From and text Body (1-1600 characters) are required"), 400
-        return send_message(sender, build_reply(body, sender))
+        response = MessagingResponse()
+        response.message(build_reply(body, sender))
+        return Response(str(response), mimetype="application/xml")
 
     @application.post("/send")
     def send():

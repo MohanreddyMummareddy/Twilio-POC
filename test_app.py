@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
+from xml.etree import ElementTree
 
 import pytest
 from twilio.base.exceptions import TwilioException, TwilioRestException
@@ -48,8 +49,23 @@ def test_webhook(application, mock_send):
         "From": "whatsapp:+919999999999", "Body": "HELP",
     })
     assert response.status_code == 200
-    assert response.json == {"message_sid": "SMtest"}
-    mock_send.assert_called_once_with("whatsapp:+919999999999", "Commands: HI, HELP, and STATUS.")
+    assert response.mimetype == "application/xml"
+    assert ElementTree.fromstring(response.data).find("Message").text == "Commands: HI, HELP, and STATUS."
+    mock_send.assert_not_called()
+
+
+def test_twiml_escapes_text_and_ignores_rest_template(application, mock_send):
+    application.config.update(TWILIO_CONTENT_SID="HX" + "a" * 32,
+        TWILIO_ACCOUNT_SID="", TWILIO_WHATSAPP_FROM="")
+    response = application.test_client().post("/whatsapp", data={
+        "From": "whatsapp:+919999999999", "Body": '<hello> & "world"',
+    })
+    assert response.status_code == 200
+    root = ElementTree.fromstring(response.data)
+    assert root.tag == "Response"
+    assert root.find("Message").text == 'You said: <hello> & "world"'
+    assert len(root.findall("Message")) == 1
+    mock_send.assert_not_called()
 
 
 @pytest.mark.parametrize("data", [{}, {"From": "whatsapp:+919999999999"},
@@ -111,9 +127,9 @@ def test_manual_send_auth(application, mock_send):
     (RuntimeError("private"), 503)])
 def test_delivery_errors(application, mock_send, exception, status):
     mock_send.side_effect = exception
-    response = application.test_client().post("/whatsapp", data={
-        "From": "whatsapp:+919999999999", "Body": "hi",
-    })
+    response = application.test_client().post("/send", json={
+        "to": "whatsapp:+919999999999", "body": "hi",
+    }, headers={"Authorization": "Bearer test-key"})
     assert response.status_code == status
     assert "private" not in response.get_data(as_text=True)
 
@@ -133,9 +149,9 @@ def test_rest_error_logs_only_safe_diagnostics(application, mock_send, caplog):
     mock_send.side_effect = TwilioRestException(
         400, "https://private-url.example", msg="private-token private-message", code=63002
     )
-    response = application.test_client().post("/whatsapp", data={
-        "From": "whatsapp:+919999999999", "Body": "private-body",
-    })
+    response = application.test_client().post("/send", json={
+        "to": "whatsapp:+919999999999", "body": "private-body",
+    }, headers={"Authorization": "Bearer test-key"})
     assert response.status_code == 502
     assert "error_code=63002 http_status=400" in caplog.text
     for private in ("private-token", "private-message", "private-url", "private-body", "+919999999999"):
@@ -146,9 +162,10 @@ def test_rest_error_logs_only_safe_diagnostics(application, mock_send, caplog):
 @pytest.mark.parametrize("exception", [TwilioException("private-token"), ConnectionError("private-token")])
 def test_sdk_and_network_logs_are_safe(application, mock_send, caplog, exception):
     mock_send.side_effect = exception
-    response = application.test_client().post("/whatsapp", data={
-        "From": "whatsapp:+919999999999", "Body": "hello",
-    })
+    response = application.test_client().post("/send", json={
+        "to": "whatsapp:+919999999999", "body": "hello",
+    }, headers={"Authorization": "Bearer test-key"})
+
     assert response.status_code == 502
     assert "SDK or network error" in caplog.text
     assert "private-token" not in caplog.text

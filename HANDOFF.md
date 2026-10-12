@@ -1,4 +1,14 @@
 # Coding assistant handoff prompt
+
+## Current implementation update — 12 October 2026
+
+The user selected the legacy WhatsApp Sandbox. `POST /whatsapp` now returns
+`application/xml` TwiML with a Message containing the custom reply, after Twilio
+signature validation. It does not call the REST API or return a message SID.
+The original REST-only webhook description below is historical and superseded.
+The authenticated `/send` endpoint retains REST sending and optional ContentSid
+template configuration. Sandbox replies are subject to the 24-hour service window;
+Sandbox membership expires after three days. See the current README for setup.
  
 You are taking over a small Flask application in the `Twilio_POC` repository. Read this document and inspect the source files before making changes.
  

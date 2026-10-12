@@ -1,5 +1,7 @@
 """Small WhatsApp text service; see HANDOFF.md for scope."""
 import hmac
+import json
+import logging
 import os
 import re
 
@@ -34,21 +36,41 @@ def reply_to_whatsapp(to, body):
         raise RuntimeError("Twilio configuration is incomplete")
     if not WHATSAPP_ADDRESS.fullmatch(config["TWILIO_WHATSAPP_FROM"]):
         raise RuntimeError("Twilio sender configuration is invalid")
+    message_options = {"body": body}
+    if config.get("TWILIO_CONTENT_SID"):
+        if not re.fullmatch(r"HX[0-9a-fA-F]{32}", config["TWILIO_CONTENT_SID"]):
+            raise RuntimeError("Invalid template SID")
+        try:
+            variables = json.loads(config.get("TWILIO_CONTENT_VARIABLES", "{}"))
+        except (ValueError, TypeError):
+            raise RuntimeError("Invalid template variables") from None
+        if not isinstance(variables, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in variables.items()
+        ):
+            raise RuntimeError("Invalid template variables")
+        message_options = {
+            "content_sid": config["TWILIO_CONTENT_SID"],
+            "content_variables": json.dumps(variables),
+        }
     client = Client(
         config["TWILIO_ACCOUNT_SID"], config["TWILIO_AUTH_TOKEN"],
         http_client=TwilioHttpClient(timeout=15),
     )
     return client.messages.create(
-        to=to, from_=config["TWILIO_WHATSAPP_FROM"], body=body
+        to=to, from_=config["TWILIO_WHATSAPP_FROM"], **message_options
     ).sid
 
 
 def create_app(test_config=None):
     application = Flask(__name__)
+    application.logger.setLevel(logging.INFO)
     application.config.from_mapping(
         TWILIO_ACCOUNT_SID=os.getenv("TWILIO_ACCOUNT_SID", ""),
         TWILIO_AUTH_TOKEN=os.getenv("TWILIO_AUTH_TOKEN", ""),
         TWILIO_WHATSAPP_FROM=os.getenv("TWILIO_WHATSAPP_FROM", ""),
+        TWILIO_CONTENT_SID=os.getenv("TWILIO_CONTENT_SID", ""),
+        TWILIO_CONTENT_VARIABLES=os.getenv("TWILIO_CONTENT_VARIABLES", "{}"),
         VALIDATE_TWILIO_REQUESTS=os.getenv("VALIDATE_TWILIO_REQUESTS", "true").lower() != "false",
         PUBLIC_WEBHOOK_URL=os.getenv("PUBLIC_WEBHOOK_URL", ""),
         SEND_API_KEY=os.getenv("SEND_API_KEY", ""),
@@ -56,6 +78,17 @@ def create_app(test_config=None):
     )
     if test_config:
         application.config.update(test_config)
+
+    @application.before_request
+    def log_webhook_received():
+        if request.path == "/whatsapp" and request.method == "POST":
+            application.logger.info("WhatsApp webhook received")
+
+    @application.after_request
+    def log_webhook_response(response):
+        if request.path == "/whatsapp" and request.method == "POST":
+            application.logger.info("WhatsApp webhook response: http_status=%s", response.status_code)
+        return response
 
     def send_message(to, body):
         try:

@@ -16,6 +16,7 @@ def application():
         "TESTING": True, "VALIDATE_TWILIO_REQUESTS": False,
         "SEND_API_KEY": "test-key", "TWILIO_AUTH_TOKEN": "test-token",
         "TWILIO_ACCOUNT_SID": "ACtest", "TWILIO_WHATSAPP_FROM": "whatsapp:+14155550100",
+        "TWILIO_CONTENT_SID": "", "TWILIO_CONTENT_VARIABLES": "{}",
     })
 
 
@@ -151,3 +152,42 @@ def test_sdk_and_network_logs_are_safe(application, mock_send, caplog, exception
     assert response.status_code == 502
     assert "SDK or network error" in caplog.text
     assert "private-token" not in caplog.text
+
+
+@pytest.mark.parametrize("validate, expected_status", [(False, 200), (True, 403)])
+def test_webhook_arrival_and_response_logs(application, caplog, validate, expected_status):
+    application.config["VALIDATE_TWILIO_REQUESTS"] = validate
+    response = application.test_client().post("/whatsapp", data={
+        "From": "whatsapp:+919999999999", "Body": "private-body",
+    })
+    assert response.status_code == expected_status
+    assert "WhatsApp webhook received" in caplog.text
+    assert f"WhatsApp webhook response: http_status={expected_status}" in caplog.text
+    assert "private-body" not in caplog.text
+    assert "+919999999999" not in caplog.text
+
+
+def test_template_send(application, monkeypatch):
+    application.config.update(TWILIO_CONTENT_SID="HXb5b62575e6e4ff6129ad7c8efe1f983e",
+        TWILIO_CONTENT_VARIABLES='{"1":"12/1","2":"3pm"}')
+    client = Mock()
+    client.messages.create.return_value = SimpleNamespace(sid="SMtemplate")
+    monkeypatch.setattr(module, "Client", Mock(return_value=client))
+    with application.app_context():
+        assert REAL_REPLY_TO_WHATSAPP("whatsapp:+919999999999", "hello") == "SMtemplate"
+    options = client.messages.create.call_args.kwargs
+    assert "body" not in options
+    assert options["content_sid"] == application.config["TWILIO_CONTENT_SID"]
+    import json
+    assert json.loads(options["content_variables"]) == {"1": "12/1", "2": "3pm"}
+
+
+@pytest.mark.parametrize("variables", ["invalid", "[]", '{"1":123}'])
+def test_invalid_template_config(application, monkeypatch, variables):
+    application.config.update(TWILIO_CONTENT_SID="HX" + "a" * 32,
+        TWILIO_CONTENT_VARIABLES=variables)
+    sdk = Mock()
+    monkeypatch.setattr(module, "Client", sdk)
+    with application.app_context(), pytest.raises(RuntimeError):
+        REAL_REPLY_TO_WHATSAPP("whatsapp:+919999999999", "hello")
+    sdk.assert_not_called()

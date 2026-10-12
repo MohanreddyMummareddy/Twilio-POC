@@ -4,6 +4,9 @@ A standalone Flask application following [HANDOFF.md](HANDOFF.md). It receives
 WhatsApp text at `POST /whatsapp` and replies through the Twilio Messages API.
 Commands: HI, HELLO, START, HELP, STATUS; other messages are echoed.
 
+For trial accounts requiring `ContentSid`, see [appointment-template.md](appointment-template.md).
+Template mode replaces these replies with the configured template.
+
 ## Local setup (Windows PowerShell)
 
 ```powershell
